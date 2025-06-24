@@ -2,7 +2,6 @@ import streamlit as st
 import subprocess
 import sys
 import platform
-import psutil
 import os
 from datetime import datetime
 
@@ -60,8 +59,17 @@ def get_system_info():
             "CPU核心数": psutil_module.cpu_count(),
             "CPU逻辑核心数": psutil_module.cpu_count(logical=True),
             "CPU使用率": f"{psutil_module.cpu_percent(interval=1):.1f}%",
-            "CPU频率": f"{psutil_module.cpu_freq().current:.0f} MHz" if psutil_module.cpu_freq() else "未知",
         }
+        
+        # 尝试获取CPU频率（某些环境可能不支持）
+        try:
+            cpu_freq = psutil_module.cpu_freq()
+            if cpu_freq:
+                cpu_info["CPU频率"] = f"{cpu_freq.current:.0f} MHz"
+            else:
+                cpu_info["CPU频率"] = "未知"
+        except:
+            cpu_info["CPU频率"] = "不支持"
         
         # 内存信息
         memory = psutil_module.virtual_memory()
@@ -73,32 +81,48 @@ def get_system_info():
         }
         
         # 磁盘信息
-        disk = psutil_module.disk_usage('/')
-        disk_info = {
-            "总磁盘空间": f"{disk.total / (1024**3):.2f} GB",
-            "已用磁盘空间": f"{disk.used / (1024**3):.2f} GB",
-            "可用磁盘空间": f"{disk.free / (1024**3):.2f} GB",
-            "磁盘使用率": f"{(disk.used / disk.total) * 100:.1f}%",
-        }
+        try:
+            disk = psutil_module.disk_usage('/')
+            disk_info = {
+                "总磁盘空间": f"{disk.total / (1024**3):.2f} GB",
+                "已用磁盘空间": f"{disk.used / (1024**3):.2f} GB",
+                "可用磁盘空间": f"{disk.free / (1024**3):.2f} GB",
+                "磁盘使用率": f"{(disk.used / disk.total) * 100:.1f}%",
+            }
+        except:
+            disk_info = {"磁盘信息": "无法获取"}
         
         # 网络信息
         try:
             network = psutil_module.net_io_counters()
-            network_info = {
-                "发送字节数": f"{network.bytes_sent / (1024**2):.2f} MB",
-                "接收字节数": f"{network.bytes_recv / (1024**2):.2f} MB",
-                "发送包数": network.packets_sent,
-                "接收包数": f"{network.packets_recv:,}",
-            }
+            if network:
+                network_info = {
+                    "发送字节数": f"{network.bytes_sent / (1024**2):.2f} MB",
+                    "接收字节数": f"{network.bytes_recv / (1024**2):.2f} MB",
+                    "发送包数": f"{network.packets_sent:,}",
+                    "接收包数": f"{network.packets_recv:,}",
+                }
+            else:
+                network_info = {"网络信息": "无法获取"}
         except:
             network_info = {"网络信息": "无法获取"}
         
         # 进程信息
-        process_info = {
-            "运行进程数": len(psutil_module.pids()),
-            "当前进程PID": os.getpid(),
-            "系统启动时间": datetime.fromtimestamp(psutil_module.boot_time()).strftime("%Y-%m-%d %H:%M:%S"),
-        }
+        try:
+            process_info = {
+                "运行进程数": len(psutil_module.pids()),
+                "当前进程PID": os.getpid(),
+            }
+            
+            # 尝试获取系统启动时间
+            try:
+                boot_time = psutil_module.boot_time()
+                process_info["系统启动时间"] = datetime.fromtimestamp(boot_time).strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                process_info["系统启动时间"] = "无法获取"
+                
+        except:
+            process_info = {"进程信息": "无法获取"}
         
         return {
             "系统信息": system_info,
