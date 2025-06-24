@@ -37,12 +37,107 @@ def check_and_install_psutil():
     """检查并安装psutil包"""
     return check_and_install_package("psutil")
 
-def get_system_info():
-    """获取系统硬件信息"""
-    psutil_module = check_and_install_psutil()
-    if not psutil_module:
+def get_public_ip():
+    """获取公网IP"""
+    # 确保requests包可用
+    requests = check_and_install_requests()
+    if not requests:
         return None
     
+    # 多个IP查询服务，提高成功率
+    services = [
+        'https://httpbin.org/ip',
+        'https://api.ipify.org?format=json',
+        'https://jsonip.com',
+        'https://api.myip.com'
+    ]
+
+    for service in services:
+        try:
+            response = requests.get(service, timeout=5)
+            data = response.json()
+
+            # 不同服务返回的字段名可能不同
+            if 'origin' in data:
+                return data['origin']
+            elif 'ip' in data:
+                return data['ip']
+            elif 'country' in data:  # myip.com的格式
+                return data['ip']
+
+        except Exception as e:
+            st.warning(f"服务 {service} 失败: {e}")
+            continue
+
+    return None
+
+def get_basic_system_info():
+    """获取基本系统信息（不需要psutil）"""
+    try:
+        import socket
+        
+        basic_info = {
+            "系统信息": {
+                "操作系统": platform.system(),
+                "系统版本": platform.version(),
+                "架构": platform.machine(),
+                "处理器": platform.processor() or "未知",
+                "Python版本": platform.python_version(),
+                "主机名": platform.node(),
+                "当前进程PID": os.getpid(),
+            },
+            "环境信息": {
+                "Python路径": sys.executable,
+                "当前工作目录": os.getcwd(),
+                "用户名": os.getenv('USER', '未知'),
+                "HOME目录": os.getenv('HOME', '未知'),
+            }
+        }
+        
+        # 尝试获取一些网络信息
+        try:
+            hostname = socket.gethostname()
+            local_ip = socket.gethostbyname(hostname)
+            basic_info["网络信息"] = {
+                "本地主机名": hostname,
+                "本地IP": local_ip,
+            }
+        except:
+            basic_info["网络信息"] = {"网络信息": "无法获取"}
+        
+        # 尝试获取一些环境变量
+        env_info = {}
+        important_vars = ['PATH', 'PYTHONPATH', 'STREAMLIT_SERVER_PORT', 'STREAMLIT_SERVER_ADDRESS']
+        for var in important_vars:
+            value = os.getenv(var)
+            if value:
+                # 如果值太长，截断显示
+                if len(str(value)) > 100:
+                    env_info[var] = str(value)[:100] + "..."
+                else:
+                    env_info[var] = str(value)
+        
+        if env_info:
+            basic_info["环境变量"] = env_info
+        
+        return basic_info
+        
+    except Exception as e:
+        st.error(f"获取基本系统信息时出错: {e}")
+        return None
+def get_system_info():
+    """获取系统硬件信息"""
+    # 首先尝试使用psutil获取详细信息
+    psutil_module = check_and_install_psutil()
+    
+    if psutil_module:
+        return get_detailed_system_info(psutil_module)
+    else:
+        st.warning("⚠️ 无法安装psutil包，将显示基本系统信息")
+        return get_basic_system_info()
+
+def get_detailed_system_info(psutil_module):
+    """使用psutil获取详细系统信息"""
     try:
         # 基本系统信息
         system_info = {
@@ -134,8 +229,8 @@ def get_system_info():
         }
         
     except Exception as e:
-        st.error(f"获取系统信息时出错: {e}")
-        return None
+        st.error(f"获取详细系统信息时出错: {e}")
+        return get_basic_system_info()
     """获取公网IP"""
     # 确保requests包可用
     requests = check_and_install_requests()
