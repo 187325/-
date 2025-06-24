@@ -1,6 +1,10 @@
 import streamlit as st
 import subprocess
 import sys
+import platform
+import psutil
+import os
+from datetime import datetime
 
 def install_package(package):
     """自动安装缺失的包"""
@@ -10,22 +14,104 @@ def install_package(package):
     except subprocess.CalledProcessError:
         return False
 
-def check_and_install_requests():
-    """检查并安装requests包"""
+def check_and_install_package(package_name, import_name=None):
+    """检查并安装指定包"""
+    if import_name is None:
+        import_name = package_name
+    
     try:
-        import requests
-        return requests
+        return __import__(import_name)
     except ImportError:
-        st.warning("正在安装 requests 包...")
-        if install_package("requests"):
-            st.success("requests 包安装成功！")
-            import requests
-            return requests
+        st.warning(f"正在安装 {package_name} 包...")
+        if install_package(package_name):
+            st.success(f"{package_name} 包安装成功！")
+            return __import__(import_name)
         else:
-            st.error("无法安装 requests 包")
+            st.error(f"无法安装 {package_name} 包")
             return None
 
-def get_public_ip():
+def check_and_install_requests():
+    """检查并安装requests包"""
+    return check_and_install_package("requests")
+
+def check_and_install_psutil():
+    """检查并安装psutil包"""
+    return check_and_install_package("psutil")
+
+def get_system_info():
+    """获取系统硬件信息"""
+    psutil_module = check_and_install_psutil()
+    if not psutil_module:
+        return None
+    
+    try:
+        # 基本系统信息
+        system_info = {
+            "系统": platform.system(),
+            "系统版本": platform.version(),
+            "架构": platform.machine(),
+            "处理器": platform.processor(),
+            "Python版本": platform.python_version(),
+            "主机名": platform.node(),
+        }
+        
+        # CPU信息
+        cpu_info = {
+            "CPU核心数": psutil_module.cpu_count(),
+            "CPU逻辑核心数": psutil_module.cpu_count(logical=True),
+            "CPU使用率": f"{psutil_module.cpu_percent(interval=1):.1f}%",
+            "CPU频率": f"{psutil_module.cpu_freq().current:.0f} MHz" if psutil_module.cpu_freq() else "未知",
+        }
+        
+        # 内存信息
+        memory = psutil_module.virtual_memory()
+        memory_info = {
+            "总内存": f"{memory.total / (1024**3):.2f} GB",
+            "已用内存": f"{memory.used / (1024**3):.2f} GB",
+            "可用内存": f"{memory.available / (1024**3):.2f} GB",
+            "内存使用率": f"{memory.percent:.1f}%",
+        }
+        
+        # 磁盘信息
+        disk = psutil_module.disk_usage('/')
+        disk_info = {
+            "总磁盘空间": f"{disk.total / (1024**3):.2f} GB",
+            "已用磁盘空间": f"{disk.used / (1024**3):.2f} GB",
+            "可用磁盘空间": f"{disk.free / (1024**3):.2f} GB",
+            "磁盘使用率": f"{(disk.used / disk.total) * 100:.1f}%",
+        }
+        
+        # 网络信息
+        try:
+            network = psutil_module.net_io_counters()
+            network_info = {
+                "发送字节数": f"{network.bytes_sent / (1024**2):.2f} MB",
+                "接收字节数": f"{network.bytes_recv / (1024**2):.2f} MB",
+                "发送包数": network.packets_sent,
+                "接收包数": f"{network.packets_recv:,}",
+            }
+        except:
+            network_info = {"网络信息": "无法获取"}
+        
+        # 进程信息
+        process_info = {
+            "运行进程数": len(psutil_module.pids()),
+            "当前进程PID": os.getpid(),
+            "系统启动时间": datetime.fromtimestamp(psutil_module.boot_time()).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        
+        return {
+            "系统信息": system_info,
+            "CPU信息": cpu_info,
+            "内存信息": memory_info,
+            "磁盘信息": disk_info,
+            "网络信息": network_info,
+            "进程信息": process_info,
+        }
+        
+    except Exception as e:
+        st.error(f"获取系统信息时出错: {e}")
+        return None
     """获取公网IP"""
     # 确保requests包可用
     requests = check_and_install_requests()
@@ -61,36 +147,110 @@ def get_public_ip():
 
 # Streamlit 应用界面
 def main():
-    st.title("🌐 公网IP地址查询工具")
-    st.write("点击按钮获取当前的公网IP地址")
+    st.title("🌐 系统信息查询工具")
+    st.write("查询公网IP地址和系统硬件配置信息")
     
-    if st.button("获取公网IP", type="primary"):
-        with st.spinner("正在查询公网IP..."):
-            public_ip = get_public_ip()
-            
-        if public_ip:
-            st.success(f"🎉 公网IP: **{public_ip}**")
-            
-            # 额外显示一些信息
-            st.info("ℹ️ 这是您当前网络的公网IP地址")
-            
-            # 可以添加复制按钮的提示
-            st.code(public_ip, language="text")
-            
-        else:
-            st.error("❌ 无法获取公网IP，请检查网络连接")
+    # 创建两个选项卡
+    tab1, tab2 = st.tabs(["🌍 公网IP查询", "💻 硬件配置"])
     
-    # 添加一些说明
-    with st.expander("ℹ️ 关于此工具"):
-        st.write("""
-        这个工具会查询多个IP服务来获取您的公网IP地址：
-        - httpbin.org
-        - api.ipify.org  
-        - jsonip.com
-        - api.myip.com
+    with tab1:
+        st.header("公网IP地址查询")
+        st.write("点击按钮获取当前的公网IP地址")
         
-        如果一个服务失败，会自动尝试下一个服务。
-        """)
+        if st.button("获取公网IP", type="primary"):
+            with st.spinner("正在查询公网IP..."):
+                public_ip = get_public_ip()
+                
+            if public_ip:
+                st.success(f"🎉 公网IP: **{public_ip}**")
+                
+                # 额外显示一些信息
+                st.info("ℹ️ 这是您当前网络的公网IP地址")
+                
+                # 可以添加复制按钮的提示
+                st.code(public_ip, language="text")
+                
+            else:
+                st.error("❌ 无法获取公网IP，请检查网络连接")
+        
+        # 添加一些说明
+        with st.expander("ℹ️ 关于IP查询"):
+            st.write("""
+            这个工具会查询多个IP服务来获取您的公网IP地址：
+            - httpbin.org
+            - api.ipify.org  
+            - jsonip.com
+            - api.myip.com
+            
+            如果一个服务失败，会自动尝试下一个服务。
+            """)
+    
+    with tab2:
+        st.header("系统硬件配置")
+        st.write("查看当前系统的详细硬件配置信息")
+        
+        if st.button("获取硬件信息", type="primary", key="hardware"):
+            with st.spinner("正在获取系统信息..."):
+                system_info = get_system_info()
+            
+            if system_info:
+                # 显示各类信息
+                for category, info in system_info.items():
+                    st.subheader(f"📊 {category}")
+                    
+                    # 创建两列布局
+                    col1, col2 = st.columns(2)
+                    
+                    items = list(info.items())
+                    mid_point = len(items) // 2
+                    
+                    with col1:
+                        for key, value in items[:mid_point]:
+                            st.metric(label=key, value=str(value))
+                    
+                    with col2:
+                        for key, value in items[mid_point:]:
+                            st.metric(label=key, value=str(value))
+                    
+                    st.divider()
+                
+                # 添加导出选项
+                st.subheader("📥 导出信息")
+                
+                # 将信息格式化为文本
+                export_text = f"系统信息报告 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                export_text += "=" * 50 + "\n\n"
+                
+                for category, info in system_info.items():
+                    export_text += f"{category}:\n"
+                    export_text += "-" * 20 + "\n"
+                    for key, value in info.items():
+                        export_text += f"{key}: {value}\n"
+                    export_text += "\n"
+                
+                st.download_button(
+                    label="📥 下载系统信息报告",
+                    data=export_text,
+                    file_name=f"system_info_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain"
+                )
+                
+            else:
+                st.error("❌ 无法获取系统信息")
+        
+        with st.expander("ℹ️ 关于系统信息"):
+            st.write("""
+            这个工具会检测以下硬件和系统信息：
+            
+            **系统信息**: 操作系统、版本、架构等基本信息
+            **CPU信息**: 处理器核心数、使用率、频率等
+            **内存信息**: 总内存、已用内存、可用内存等
+            **磁盘信息**: 磁盘空间使用情况
+            **网络信息**: 网络流量统计
+            **进程信息**: 系统进程和启动时间
+            
+            注意：在云端环境中，某些信息可能受到限制。
+            """)
 
 if __name__ == "__main__":
     main()
