@@ -22,7 +22,14 @@ def check_and_install_dependencies():
     required_packages = [
         'requests',
         'psutil',
-        'pyOpenSSL'
+        'pyOpenSSL',
+        'urllib3',
+        'argparse',
+        'pathlib',
+        'base64',
+        'random',
+        'importlib',
+        'pip'
     ]
     
     print("🔍 检查Python依赖包...")
