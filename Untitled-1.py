@@ -38,7 +38,7 @@ def check_and_install_dependencies():
         if importlib.util.find_spec(package) is None:
             print(f"⚠️ 未找到 {package} 包，正在安装...")
             try:
-                pip.main(['install', package])
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--user', package])
                 print(f"✅ {package} 安装成功")
             except Exception as e:
                 print(f"❌ 安装 {package} 失败: {e}")
